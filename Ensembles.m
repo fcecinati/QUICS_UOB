@@ -1,4 +1,4 @@
-function ensembles = Ensembles(delta, coord, sim_hours) % Start and end date to be specified with time too
+function ensembles = Ensembles(delta, coord, sim_hours, results_path) % Start and end date to be specified with time too
 % Generates the ensembles given the deltas from the german method and the
 % start and end date of the event to model
 
@@ -16,25 +16,40 @@ maxy = max(coord(2,:));   maxy = ceil(maxy)+0.5;
 x_interp = (minx:maxx);
 y_interp = (miny:maxy);
 [x_int, y_int] = meshgrid(x_interp, y_interp);
-X = size(x_interp);
-Y = size(y_interp);
+X = size(x_interp);     X = X(2);
+Y = size(y_interp);     Y = Y(2);
 
-ensembles = zeros(X,Y,sim_hours,n);
+ensembles = zeros(Y,X,sim_hours,n);
 
 for ens=1:n
     % Random selection of the starting point
     rand_start = randi(t - sim_hours);
-    deltas = delta(:,rand_start:(rand_start + sim_hour - 1),ens);
+    deltas = delta(:,rand_start:(rand_start + sim_hours - 1),ens);
 
     % interpolate the deltas
     for i=1:sim_hours
-        d = deltas(:,i,n);
+        d = deltas(:,i);
         perturbation = griddata(coord(1,:),coord(2,:),d,x_int,y_int, 'v4');
-        ensembles(:,:,i,n) = perturbation;
+        ensembles(:,:,i,ens) = perturbation;
     end
 end
 
 % Write the output
+
+name = [results_path, 'Ensembles'];
+save(name,'ensembles')
+
+PARAM = [0; maxy*1000; minx*1000; 1000; 1000; Y; X];
+for ens = 1:n
+    for time = 1:sim_hours
+        DATE = [2000;1;1;time;0;0];
+        name = [results_path, 'Ensemble_n',num2str(ens),'_step',num2str(time),'.dat'];
+        MTX = ensembles(:,:,time,ens);
+        
+        save2nimrod(name,MTX,DATE,PARAM)
+        
+    end
+end
 
 
     
