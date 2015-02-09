@@ -17,12 +17,16 @@ coordinates_file = 'gaugecoordinates.dat';
 % Path to the folder where this and the other scripts/functions are:
 scripts_and_functions_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\QUICS_UOB\';
 % Results path
-results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\New_test_for_temp_plot\';
+results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\Test_5\';
+% 
+% % Which of the stations have unusable data?
+% known_corrupted_data_stations = [8;30;31;73;78;81;98;100;107;111;141;145;152;212;213;228;229; ...  % invalid data  
+%                                 168;174;178;194;% no data available for these gauges in 2007
+%                                 20;40;128;208;211];%other
 
-% Which of the stations have unusable data?
-known_corrupted_data_stations = [8;30;31;73;78;81;98;100;107;111;141;145;152;212;213;228;229; ...  % invalid data  
-                                168;174;178;194;% no data available for these gauges in 2007
-                                20;40;128;208;211];%other
+% Good gauges:
+good = [];
+
 % Which year do you want to use for the covariance matrix calculation?
 year_to_consider = 2007;
 % How many ensembles do you want to generate
@@ -31,13 +35,13 @@ number_ens = 1;
 sim_hours = 10;
 
 % Do you want to check the covariance decomposition? (Y/N)
-cov_dec = 'N';
+cov_dec = 'Y';
 % Do you want to plot the spatial correlation of the errors?
-plot_spa = 'N';
+plot_spa = 'Y';
 % Do you want to plot the temporal correlation of the errors?
 plot_tem = 'Y';
 % Do you want to check the spatial correlation of the perturbed fields?
-spa_dec = 'N';
+spa_dec = 'Y';
 % Do you want to check the temporal correlation of the perturbed fields?
 temp_dec = 'Y';
 
@@ -72,10 +76,12 @@ G(G==0) = NaN;
 R(R==0) = NaN;
 
 % Delete the stations with No Data or corrupted data (from the list above)
-corrupted = known_corrupted_data_stations;
-G(:,corrupted) = [];
-R(:,corrupted) = [];
-coord(:,corrupted) = [];
+% corrupted = known_corrupted_data_stations;
+% G(:,corrupted) = [];
+% R(:,corrupted) = [];
+% coord(:,corrupted) = [];
+
+
 
 % Final size of the data matrix
 sz = size(R);
@@ -90,8 +96,10 @@ x=sz(2);
 % Error matrix
 err = 10*(log(G./R));
 
+R(isnan(err)==1) = NaN;
+
 % Mean without weights
-mean_e = nanmean(err);
+mean_e = nansum(R.*err)./nansum(R);
 
 % Covariance matrix of the errors without weights
 diff = zeros(t,x);
@@ -100,17 +108,18 @@ for i=1:t
 end
 cov_e = zeros(x,x);
 temp1 = zeros(t,1);
-
+temp2 = zeros(t,1);
 for k = 1:x
     for l = 1:x
         for tm = 1:t
-            temp1(tm) = diff(tm,k)*diff(tm,l);
+            temp1(tm) = R(tm,k)*R(tm,l)*diff(tm,k)*diff(tm,l);
+            temp2(tm) = R(tm,k)*R(tm,l);
         end
-        cov_e(k,l) = nansum(temp1)/t;
+        cov_e(k,l) = nansum(temp1)/nansum(temp2);
     end
 end
 
-clear diff temp1
+clear temp1
 %% spatial decorrelation function and plotting
 
 %calculation of correlation coefficients and distances
@@ -152,36 +161,51 @@ end
 %% temporal decorrelation function and plotting
 
 % correlation calculation at 1, 2, 3 hours lag
-rho_t = zeros(x,4);
-rho_t(:,1) = 1;
-for lag=1:3
-    for j=1:x
-        v1 = err(1:(t-lag),j);
-        v2 = err((1+lag):t,j);
-        m1 = nanmean(v1);
-        m2 = nanmean(v2);
-        sd1 = nanstd(v1);
-        sd2 = nanstd(v2);
-        rho_t(j,1+lag)=(nanmean((v1-m1).*(v2-m2)))/(sd1*sd2);
-    end
-end
-maxrho = max(rho_t);
-minrho = min(rho_t);
-rho = nanmean(rho_t);
+% Autoregressive parameters r1 and r2
+r1=zeros(x,1);
+temp1 = zeros(t-1,1);
+temp2 = zeros(t-1,1);
 
-x_axis = (0:3);
-clear rho_t
+for k = 1:x
+    for tm = 1:t-1
+        temp1(tm) = R(tm,k)*R(tm+1,k)*diff(tm,k)*diff(tm+1,k);
+        temp2(tm) = R(tm,k)*R(tm+1,k);
+    end
+    r1(k) = nansum(temp1)/nansum(temp2)*cov_e(k,k);
+end
+r1m = nanmean(r1);
+r1max = max(r1);
+r1min = min(r1);
+
+r2=zeros(x,1);
+temp1 = zeros(t-2,1);
+temp2 = zeros(t-2,1);
+for k = 1:x
+    for tm = 1:t-2
+        temp1(tm) = R(tm,k)*R(tm+2,k)*diff(tm,k)*diff(tm+2,k);
+        temp2(tm) = R(tm,k)*R(tm+2,k);
+    end
+    r2(k) = nansum(temp1)/nansum(temp2)*cov_e(k,k);
+end
+r2m = nanmean(r2);
+r2max = max(r2);
+r2min = min(r2);
+
+r_mean = [1,r1m,r2m];
+r_max = [1,r1max,r2max];
+r_min = [1,r1min,r2min];
+x_axis = [0, 1, 2];
 
 %Plotting
 if plot_tem == 'Y'
     fig = figure;
     figure(fig)
-    plot(x_axis,rho)
+    plot(x_axis,r_mean)
     title('temporal correlation of the errors');
     xlabel('hours')
     hold on
-    plot(x_axis, maxrho, 'g')
-    plot(x_axis, minrho, 'g')
+    plot(x_axis, r_max, 'g')
+    plot(x_axis, r_min, 'g')
     name = [results_path, 'error_temporal_correlation'];
     saveas(fig,name,'fig')
     saveas(fig,name,'jpg')
@@ -213,10 +237,6 @@ end
 
 %% Autoregressive parameters calculated
       
-% Instead, taking the r1 and r2 from temporal decorrelation data
-r1m = rho(2);
-r2m = rho(3);
-
 % AR(2) parameters
 a1 = r1m*(1-r2m)/(1-(r1m^2));
 a2 = (r2m-(r1m^2))/(1-(r1m^2));
@@ -250,16 +270,16 @@ if spa_dec == 'Y'
         mean_d = nanmean(d1);
 
         % Covariance Calculation
-        diff = zeros(t-2,x);
+        diffd = zeros(t-2,x);
         for i=1:t-2 
-            diff(i,:) = d1(i,:)- mean_d;
+            diffd(i,:) = d1(i,:)- mean_d;
         end
         cov_d = zeros(x,x);
         temp1 = zeros(t-2,1);
         for k = 1:x
             for l = 1:x
                 for tm = 1:t-2
-                    temp1(tm) = diff(tm,k)*diff(tm,l);
+                    temp1(tm) = diffd(tm,k)*diffd(tm,l);
                 end
                 cov_d(k,l) = nansum(temp1)/(t-2);
             end
@@ -297,31 +317,48 @@ if temp_dec == 'Y'
     for ens=1:n
         d1 = delta(:,:,ens)';
         rho_t_d = zeros(x,4);
-        rho_t_d(:,1) = 1;
-        for lag=1:3
-            for j=1:x
-                v1 = d1(1:(t-lag-2),j);
-                v2 = d1((1+lag):(t-2),j);
-                m1 = nanmean(v1);
-                m2 = nanmean(v2);
-                sd1 = nanstd(v1);
-                sd2 = nanstd(v2);
-                rho_t_d(j,1+lag)=(nanmean((v1-m1).*(v2-m2)))/(sd1*sd2);
+        
+        r1d=zeros(x,1);
+        temp1 = zeros(t-1,1);
+        temp2 = zeros(t-1,1);
+        for k = 1:x
+            for tm = 1:t-3
+                temp1(tm) = R(tm,k)*R(tm+1,k)*diffd(tm,k)*diffd(tm+1,k);
+                temp2(tm) = R(tm,k)*R(tm+1,k);
             end
+            r1d(k) = nansum(temp1)/nansum(temp2)*cov_e(k,k);
         end
-        maxrhod = max(rho_t_d);
-        minrhod = min(rho_t_d);
-        rho_d = nanmean(rho_t_d);
+        r1dm = nanmean(r1d);
+        r1dmax = max(r1d);
+        r1dmin = min(r1d);
+
+        r2d=zeros(x,1);
+        temp1 = zeros(t-2,1);
+        temp2 = zeros(t-2,1);
+        for k = 1:x
+            for tm = 1:t-4
+                temp1(tm) = R(tm,k)*R(tm+2,k)*diffd(tm,k)*diffd(tm+2,k);
+                temp2(tm) = R(tm,k)*R(tm+2,k);
+            end
+            r2d(k) = nansum(temp1)/nansum(temp2)*cov_e(k,k);
+        end
+        r2dm = nanmean(r2d);
+        r2dmax = max(r2d);
+        r2dmin = min(r2d);
+
+        rd_mean = [1,r1dm,r2dm];
+        rd_max = [1,r1dmax,r2dmax];
+        rd_min = [1,r1dmin,r2dmin];
 
         fig = figure;
         figure(fig)
-        plot(x_axis(1:3),rho_d(1:3))
+        plot(x_axis,rd_mean)
         hold on
-        plot(x_axis(1:3),rho(1:3),'r')
-        plot(x_axis(1:3), maxrho(1:3), 'g')
-        plot(x_axis(1:3), minrho(1:3), 'g')
-        plot(x_axis(1:3), maxrhod(1:3), 'c')
-        plot(x_axis(1:3), minrhod(1:3), 'c')
+        plot(x_axis,r_mean,'r')
+        plot(x_axis, r_max, 'g')
+        plot(x_axis, r_min, 'g')
+        plot(x_axis, rd_max, 'c')
+        plot(x_axis, rd_min, 'c')
         title('temporal correlation of the deltas');
         xlabel('hours')
         name = [results_path, 'temporal_correlation_delta_' num2str(ens)];
@@ -332,7 +369,7 @@ if temp_dec == 'Y'
 end
 
 %% saving the results
-save ('\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\Germann_no_weightings\delta.mat','delta','coord')
+save ([results_path,'delta.mat'],'delta','coord')
 
 %% Generate the ensembles
 ensembles = Ensembles(delta, coord, sim_hours, results_path);

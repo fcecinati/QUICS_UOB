@@ -5,7 +5,11 @@ function ensembles = Ensembles(delta, coord, sim_hours, results_path) % Start an
 sz = size(delta);
 x = sz(1);
 t = sz(2);
-n = sz(3);
+if numel(sz)>2
+    n = sz(3);
+else
+    n = 1;
+end
 
 % Define the grid to interpolate
 coord = coord/1000;
