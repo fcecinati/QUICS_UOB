@@ -49,8 +49,8 @@ side = 256;
 spa_corr_calc = 'Y';
 
 % If not, what are the coefficients of the semivariogram?
-R0 = 1;
-F = 1;
+R0 = 9.437809846623692;
+F = 0.562698743589422;
 % What are the statistical characteristics of the errors?
 mu = -0.00348;
 sigma = 5.6855;

@@ -1,40 +1,61 @@
-function [] = NewGeneratorTester(a,b) 
+function [] = NewGeneratorTester(b) 
 % a is the filter order, b is the cut-off frequency.
+res_folder = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_NewGenerator\Test3\';
 close all
-
+tic
 mu = 0;
 sigma = 5.6855;
-sigma1 = (sigma)/(1.09641257*(a^(-0.94003379)));
-k = (mu^2)/(sigma1^2);
-th = (sigma1^2)/mu;
 
-R = random('gam',k,th,256,256);
-
-% R=normrnd(mu,sigma1,256,256);
+R = normrnd(mu,sigma,256,256);
 F = 0.566129633372927;
+toc
+a = 80;
+c = sigma^2;
 
-f1=fir1(a,b,'low');
+% f1 = fir1(a,b,'low');
+base = 1:a;
+fun = c -(c.*(1-exp(-3.*(base./b).^F)));
+f1 = [fliplr(fun),c,fun];
 f2 = ftrans2(f1);
-Rnew = filter2(f2,R);
+Rnew = filter2(f2,R)./a;
+toc
+
+oldvar = var(R(:));
+newvar = var(Rnew(:));
+varratio = newvar/oldvar;
+
+Rnew = Rnew/(varratio^0.5);
+newvar = var(Rnew(:));
+varratio = newvar/oldvar;
+
+fig0 = figure;
+figure(fig0)
+set(fig0,'Position',[100 80 700 300])
+plot(f1)
+title('new filter')
+saveas(fig0,[res_folder,'new_1D_', num2str(a),'_',num2str(b),'.jpg'])
 
 fig1=figure;
 figure(fig1)
 set(fig1,'Position', [10 500 600 500])
 freqz(f1)
 title('Filter')
+saveas(fig1,[res_folder,'new_mag-phase_', num2str(a),'_',num2str(b),'.jpg'])
 
 fig2=figure;
 figure(fig2)
 set(fig2,'Position', [650 500 600 500])
 freqz2(f2)
 title('Filter')
+saveas(fig2,[res_folder,'new_2D_', num2str(a),'_',num2str(b),'.jpg'])
 
 fig3=figure;
 figure(fig3)
 set(fig3,'Position', [1300 500 600 500])
 imagesc(Rnew)
-title('Generated Noise')
+title(['Generated Noise - var = ',num2str(varratio, 4)])
 colorbar
+saveas(fig3,[res_folder,'new_noise_', num2str(a),'_',num2str(b),'.jpg'])
 
 [hvar, vvar] = Variogram(Rnew);
 
@@ -48,10 +69,11 @@ myfit = fit(h,variog,myfunction,myoption,'problem',F);
 fig4 = figure;
 figure(fig4)
 hold on
-set(fig4,'Position', [250 80 700 300])
+set(fig4,'Position', [1000 80 700 300])
 plot(myfit,h,variog)
 title ('semivariogram')
 hold off
+saveas(fig4,[res_folder,'new_semivariogram_', num2str(a),'_',num2str(b),'.jpg'])
 
 
 
