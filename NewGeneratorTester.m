@@ -14,19 +14,19 @@ c = sigma^2;
 
 % f1 = fir1(a,b,'low');
 base = 1:a;
-fun = c -(c.*(1-exp(-3.*(base./b).^F)));
-f1 = [fliplr(fun),c,fun];
+fun = exp(-3.*(base./b).^F);
+f1 = [fliplr(fun),1,fun];
 f2 = ftrans2(f1);
-Rnew = filter2(f2,R)./a;
+Rnew = filter2(f2,R);
 toc
 
-oldvar = var(R(:));
-newvar = var(Rnew(:));
-varratio = newvar/oldvar;
+newstd = std(Rnew(:));
+stdratio = newstd/sigma;
 
-Rnew = Rnew/(varratio^0.5);
-newvar = var(Rnew(:));
-varratio = newvar/oldvar;
+Rnew = Rnew/stdratio;
+newstd = std(Rnew(:));
+stdratio = newstd/sigma;
+m = mean(Rnew(:));
 
 fig0 = figure;
 figure(fig0)
@@ -53,7 +53,7 @@ fig3=figure;
 figure(fig3)
 set(fig3,'Position', [1300 500 600 500])
 imagesc(Rnew)
-title(['Generated Noise - var = ',num2str(varratio, 4)])
+title(['Generated Noise; stdratio = ',num2str(stdratio, 4), '; mean = ',num2str(m,4)])
 colorbar
 saveas(fig3,[res_folder,'new_noise_', num2str(a),'_',num2str(b),'.jpg'])
 

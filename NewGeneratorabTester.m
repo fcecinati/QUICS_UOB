@@ -11,7 +11,7 @@ oldvar = var(R(:));
 toc
 
 % test a for 3 different b values
-b3 = [30,50,80];
+b3 = [100,150,200];
 
 for b=b3
     linecolours = colormap('jet');
@@ -20,7 +20,7 @@ for b=b3
     set(fig0,'Position', [1000 80 700 300])
     title ('semivariogram')
     hold on
-    for a=20:20:200
+    for a=100:10:200
         base = 1:a;
         fun = c -(c.*(1-exp(-3.*(base./b).^F)));
         f1 = [fliplr(fun),c,fun];
@@ -32,7 +32,7 @@ for b=b3
         [hvar, vvar] = Variogram(Rnew);
         variog = (hvar + vvar)/2;
         h = (1:128)';
-        plot(h,variog,'color',linecolours(a/4,:))        
+        plot(h,variog,'color',linecolours(a*3/10,:))        
     end
     hold off
     saveas(fig0,[res_folder,'semivariogram_b_', num2str(b),'_various_a.jpg'])
@@ -41,7 +41,7 @@ end
 
 toc
 
-a3 = [50,100,150];
+a3 = [100,150,200];
 
 for a=a3
     linecolours = colormap('jet');
@@ -50,7 +50,7 @@ for a=a3
     set(fig0,'Position', [1000 80 700 300])
     title ('semivariogram')
     hold on
-    for b=10:10:100
+    for b=100:10:200
         base = 1:a;
         fun = c -(c.*(1-exp(-3.*(base./b).^F)));
         f1 = [fliplr(fun),c,fun];
@@ -62,7 +62,7 @@ for a=a3
         [hvar, vvar] = Variogram(Rnew);
         variog = (hvar + vvar)/2;
         h = (1:128)';
-        plot(h,variog,'color',linecolours(b/2,:))        
+        plot(h,variog,'color',linecolours(b*3/10,:))        
     end
     hold off
     saveas(fig0,[res_folder,'semivariogram_a_', num2str(a),'_various_b.jpg'])

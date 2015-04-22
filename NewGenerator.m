@@ -10,7 +10,7 @@ tic
 % Folders:
 
 % Results path
-results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_NewGenerator\Test1\';
+results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_NewGenerator\Test6\';
 % Path to the complete radar data
 radar_folder = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\data_north_england\test20\';
 % Temporary folder
@@ -29,12 +29,12 @@ year_to_consider = 2007;
 % As far as you know, which of the stations have unusable data?
 known_corrupted_data_stations = [8;30;31;73;78;81;98;100;107;111;141;145;152;212;213;228;229;168;174;178;194;20;40;128;208;211];
 % Description for the readme file:
-description = 'First test';
+description = 'More test on the newly developed method, before meeting Miguel';
 
 % Parameters:
 
 % How many ensembles do you want to generate
-n_ensembles = 1;
+n_ensembles = 3;
 % What is the starting date of the ensembles you need?
 starting = '2008-05-04 00:00:00';
 % How many hours is your simulation long?
@@ -46,21 +46,25 @@ northing = 556000;
 side = 256;
 
 % Do you need to calculate the original spatial correlation (i.e. you don't know the coefficients)?
-spa_corr_calc = 'Y';
+spa_corr_calc = 'N';
 
-% If not, what are the coefficients of the semivariogram?
+% If not, what are the coefficients of the exponential function describing correlation decay?
 R0 = 9.437809846623692;
 F = 0.562698743589422;
 % What are the statistical characteristics of the errors?
-mu = -0.00348;
+mu = 0;
 sigma = 5.6855;
 
 % Do you need to calibrate the filter?
-filter_calibr = 'Y';
+filter_calibr = 'N';
+
+% If yes, which values you would like to try:
+a_test = 100:10:200;
+b_test = 100:10:200;
 
 % Otherwise, which are the coefficients of the filter?
-a=50;
-b=0.1;
+abest=120;
+bbest=140;
 
 %% Start script
 toc
@@ -118,6 +122,7 @@ if spa_corr_calc == 'Y'
 
     % Standard Deviation
     std_e = nanstd(err);
+    sigma = std_e;
 
     % Overall variance
     var_e = nanvar(err(:));
@@ -161,18 +166,22 @@ if spa_corr_calc == 'Y'
     c(isnan(c)) = [];
     d=d/1000;         %Important! the function is calculated on kilometers as unit
 
-    % Fit on decorrelation function
+    % Fit on exponential decorrelation function
     myfunction1 = fittype('exp(-((d/R0)^F))','independent',{'d'},'coefficients',{'R0','F'});
     myoption1 = fitoptions('Method','NonlinearLeastSquares','StartPoint',[50 0.9]);
     myfit1 = fit(d,c,myfunction1,myoption1);
-end
-toc
+    
+    toc
 
-R0 = myfit1.R0;
-F = myfit1.F;
-h=(1:200)';
+    R0 = myfit1.R0;
+    F = myfit1.F;
+    
+end
+
+% Calculate and save the semivariogram coefficients
+h=(1:(side/2))';
 corr_function = exp(-((h./R0).^F));
-variog_function = var_e.*(1-corr_function);
+variog_function = (sigma^2).*(1-corr_function);
 
 myfunction2 = fittype('c.*(1-exp(-3.*(h.^F)./a.^F))','independent',{'h'},'coefficients',{'c','a'},'problem','F');
 myoption2 = fitoptions('Method','NonlinearLeastSquares','StartPoint',[7 40]);
@@ -181,56 +190,175 @@ myfit2 = fit(h,variog_function,myfunction2,myoption2,'problem',F);
 sill = myfit2.c;
 range = myfit2.a;
 
-save('\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_NewGenerator\Test1\Coefficients.m','sill','range')
-toc
+save([results_path,'SemivariogramCoefficients.m'],'sill','range')
 
+toc
 
 
 %% Calibration of filter
-toc
-cd('\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\QUICS_UOB')
-h = (1:128)';
-sill_matrix = zeros(10,10);
-range_matrix = zeros(10,10);
-i=0; j=0;
-for i=1:10
-    a=i*10;
-    sigma1 = (sigma)/(1.09641257*(a^(-0.94003379)));
-    for j=1:10
-        b=j*0.002;
-        variog = zeros(5,128);
-        for k=1:10
-            %Generate normal random fields
-            d=normrnd(0,sigma1,256,256);
 
-            % Apply a lowpass filter
-            f1=fir1(a,b,'low');
-            f2 = ftrans2(f1);
-            dnew = filter2(f2,d);
+if filter_calibr == 'Y'
+    
+    toc
 
-            % Calculate the semivariogram
-            [hvar, vvar] = Variogram(dnew);
-            variog(k,:) = (hvar + vvar)/2;
+    cd('\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\QUICS_UOB')
+    h = (1:128)';
+    a_size = size(a_test,2);
+    b_size = size(b_test,2);
+    sill_matrix = zeros(a_size,b_size);
+    range_matrix = zeros(a_size,b_size);
+    i = 0;  j = 0;
+    
+    for ai=a_test
+        i = i + 1;
+
+        for bi=b_test
+            j = j + 1;
+            
+            variog = zeros(20,128);
+            for k=1:10
+                
+                %Generate normal random fields
+                d=normrnd(0,sigma,256,256);
+                
+                % Apply a lowpass filter
+                base = 1:ai;
+                fun = exp(-3.*(base./bi).^F);
+                f1 = [fliplr(fun),1,fun];
+                f2 = ftrans2(f1);
+                dnew = filter2(f2,d);
+                newstd = std(dnew(:));
+                stdratio = newstd/sigma;
+                dnew = dnew/stdratio;
+                [hvar, vvar] = Variogram(dnew);
+                variog(k,:) = (hvar + vvar)/2;
+                
+                % Calculate the semivariogram
+                [hvar, vvar] = Variogram(dnew);
+                variog(k,:) = (hvar + vvar)/2;
+            end
+            variog = mean(variog,1)';
+
+            myfunction = fittype('c.*(1-exp(-3.*(h)./(a)))','independent',{'h'},'coefficients',{'c','a'});
+            myoption = fitoptions('Method','NonlinearLeastSquares','StartPoint',[7 40]);
+            myfit = fit(h,variog,myfunction,myoption);
+
+            sill_matrix(i,j) = myfit.c;
+            range_matrix(i,j) = myfit.a;
+
         end
-        variog = mean(variog,1)';
-        
-        myfunction = fittype('c.*(1-exp(-3.*(h)./(a)))','independent',{'h'},'coefficients',{'c','a'});
-        myoption = fitoptions('Method','NonlinearLeastSquares','StartPoint',[7 40]);
-        myfit = fit(h,variog,myfunction,myoption);
+        j=0;
+    end
+    
+    toc
+    
+    rmse_matrix = ((sill_matrix - sill).^2 + (range_matrix-range).^2).^0.5;
+    [abestindex,bbestindex] = find(rmse_matrix == min(rmse_matrix(:)));
+    abest = a_test(abestindex);
+    bbest = b_test(bbestindex);
+    
+    fig1 = figure;
+    figure(fig1)
+    imagesc(b_test,a_test,rmse_matrix)
+    colorbar
+    xlabel('b')
+    ylabel('a')
+    saveas(fig1,[results_path, 'RMSE 3'],'jpg')
+    
+    mean_on_a = mean(rmse_matrix);
+    fig2 = figure;
+    figure(fig2)
+    plot(b_test,mean_on_a)
+    xlabel('values of the coefficient b')
+    ylabel('RMSE')
+    title('values of RMSE varying the coefficient b and averaging on a')
+    saveas(fig2,[results_path, 'RMSE avg 3'],'jpg')
+    
+end
 
-        sill_matrix(i,j) = myfit.c;
-        range_matrix(i,j) = myfit.a;
-        
+toc
+
+currentfullpath = mfilename('fullpath'); filenamesz = (size(mfilename)); currentdir = currentfullpath(1:(end-filenamesz(2)));
+cd(currentdir) 
+st = datenum(starting);
+raddata = zeros(side,side,time_steps);
+ens = zeros(side,side,time_steps,n_ensembles);
+
+for i = 1:time_steps
+    % Find the radar data for the correct date
+    date = st + (i-1)/24;
+    yr = year(date);    mn = month(date);   dy = day(date);     hr = hour(date);
+    datename = [num2str(yr),num2str(mn, '%02d'),num2str(dy, '%02d'),num2str(hr, '%02d')];
+    filename = [radar_folder,num2str(yr),num2str(mn, '%02d'),num2str(dy, '%02d'),num2str(hr, '%02d'),'00.dat.gz'];
+
+    % Check if file is compressed
+    tt=length(filename);
+    if ( strcmp('.gz', filename(tt-2:tt)) == 1)   
+         newname = gunzip(filename, tmpfolder); 
+         filename = newname{1,1};    
+    end
+
+    % Open the radar data
+    [mtx, ~, r_param] = readnimrod(filename);   % function to read nimrod Met Office rainfall data
+    mtx = flipud(mtx);
+    
+    % Define the domain
+    x_start = (easting - r_param(3))/ 1000;
+    x_end = (easting - r_param(3))/ 1000 + side - 1;
+    y_start = (r_param(2) - northing)/ 1000;
+    y_end = (r_param(2) - northing)/ 1000 + side - 1;
+
+    % Trim the radar data on the domain
+    raddata(:,:,i) = mtx(y_start:y_end, x_start:x_end);
+
+    toc
+    
+    for en=1:n_ensembles
+    
+        %% Generate noise fields
+        %Generate normal random fields
+        d=normrnd(0,sigma,256,256);
+
+        % Apply a lowpass filter
+        base = 1:abest;
+        fun = exp(-3.*(base./bbest).^F);
+        f1 = [fliplr(fun),1,fun];
+        f2 = ftrans2(f1);
+        dnew = filter2(f2,d);
+        newstd = std(dnew(:));
+        stdratio = newstd/sigma;
+        dnew = dnew/stdratio;
+        mdnew = mean(dnew(:));
+        dnew = dnew - mdnew ;
+
+        % Combine noise and radar data
+        logens = dnew + 10*(log(raddata(:,:,i)));
+        ens(:,:,i,en) = exp(logens/10);
+
     end
 end
+
 toc
-rse_matrix = ((sill_matrix - sill).^2 + (range_matrix-range).^2).^0.5;
-[abest,bbest] = find(rse_matrix == min(rse_matrix(:)));
 
+save([results_path,'generatedensembles'],'raddata','ens')
 
+toc
 
-myfit = fit(h,variog,myfunction,myoption);
-        
+%% Save results in Nimrod format
+
+% PARAM = e_param;
+% 
+% for en = 1:n_ensembles
+%     for time = 1:time_steps
+%         DATE = r_date(:,time);
+%         name = [ensembles_folder, 'Ensemble_n',num2str(en),'_',sprintf('%02d',r_date(:,time)),'.dat'];
+%         MTX = ens(:,:,time,en);
+%         
+%         save2nimrod(name,MTX,DATE,PARAM)
+%         
+%     end
+% end
+
 
 
 
