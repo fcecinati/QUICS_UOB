@@ -10,7 +10,7 @@ tic
 % Folders:
 
 % Results path
-results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_NewGenerator\Test6\';
+results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_NewGenerator\Test10\';
 % Path to the complete radar data
 radar_folder = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\data_north_england\test20\';
 % Temporary folder
@@ -29,7 +29,7 @@ year_to_consider = 2007;
 % As far as you know, which of the stations have unusable data?
 known_corrupted_data_stations = [8;30;31;73;78;81;98;100;107;111;141;145;152;212;213;228;229;168;174;178;194;20;40;128;208;211];
 % Description for the readme file:
-description = 'More test on the newly developed method, before meeting Miguel';
+description = 'This test uses the variance value observed in Germann';
 
 % Parameters:
 
@@ -38,7 +38,7 @@ n_ensembles = 3;
 % What is the starting date of the ensembles you need?
 starting = '2008-05-04 00:00:00';
 % How many hours is your simulation long?
-time_steps = 25;
+time_steps = 13;
 % what are the easting and nothing in meters (top left corner)?
 easting = 300000;
 northing = 556000;
@@ -49,11 +49,12 @@ side = 256;
 spa_corr_calc = 'N';
 
 % If not, what are the coefficients of the exponential function describing correlation decay?
-R0 = 9.437809846623692;
-F = 0.562698743589422;
+R0 = 9.604774513342644;
+F = 0.566129633372927;
 % What are the statistical characteristics of the errors?
-mu = 0;
-sigma = 5.6855;
+mu = -0.1199;
+% sigma = 5.6855;
+sigma = 2.8;
 
 % Do you need to calibrate the filter?
 filter_calibr = 'N';
@@ -115,15 +116,25 @@ if spa_corr_calc == 'Y'
     %% Calculation of error statistics
 
     % Error matrix
-    err = 10*(log(G./R));
+    er_nongaussian = 10*(log(G./R));
+
+    % Application of normal score transform to obtain a gaussian error matrix
+    R(isnan(er_nongaussian)==1) = NaN;
+    er_nongaussian_vector = er_nongaussian(isnan(er_nongaussian)==0);
+    [er_gaussian, scores] = nscore(er_nongaussian_vector);
+    err = er_nongaussian;
+    err(isnan(err)==0)=er_gaussian;
+    er=err;
+    er(isnan(er)==1)=0;
+    
+    save([results_path,'scores'],'scores')
     
     % Mean
-    mean_e = nanmean(err);
+    mean_e = nanmean(er);
 
     % Standard Deviation
-    std_e = nanstd(err);
-    sigma = std_e;
-
+    std_e = nanstd(er);
+    
     % Overall variance
     var_e = nanvar(err(:));
 
@@ -170,12 +181,12 @@ if spa_corr_calc == 'Y'
     myfunction1 = fittype('exp(-((d/R0)^F))','independent',{'d'},'coefficients',{'R0','F'});
     myoption1 = fitoptions('Method','NonlinearLeastSquares','StartPoint',[50 0.9]);
     myfit1 = fit(d,c,myfunction1,myoption1);
-    
+
     toc
 
     R0 = myfit1.R0;
     F = myfit1.F;
-    
+
 end
 
 % Calculate and save the semivariogram coefficients
@@ -190,7 +201,7 @@ myfit2 = fit(h,variog_function,myfunction2,myoption2,'problem',F);
 sill = myfit2.c;
 range = myfit2.a;
 
-save([results_path,'SemivariogramCoefficients.m'],'sill','range')
+save([results_path,'SemivariogramCoefficients.mat'],'sill','range')
 
 toc
 
@@ -219,7 +230,7 @@ if filter_calibr == 'Y'
             for k=1:10
                 
                 %Generate normal random fields
-                d=normrnd(0,sigma,256,256);
+                d=normrnd(mu,sigma,256,256);
                 
                 % Apply a lowpass filter
                 base = 1:ai;
@@ -283,6 +294,8 @@ cd(currentdir)
 st = datenum(starting);
 raddata = zeros(side,side,time_steps);
 ens = zeros(side,side,time_steps,n_ensembles);
+load('\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_NewGenerator\scores.mat')
+noisenew = zeros(256,256,25,100);
 
 for i = 1:time_steps
     % Find the radar data for the correct date
@@ -317,20 +330,23 @@ for i = 1:time_steps
     
         %% Generate noise fields
         %Generate normal random fields
-        d=normrnd(0,sigma,256,256);
+        d=normrnd(mu,sigma,256,256);
+        stdd = std(d(:));
 
         % Apply a lowpass filter
         base = 1:abest;
-        fun = exp(-3.*(base./bbest).^F);
-        f1 = [fliplr(fun),1,fun];
-        f2 = ftrans2(f1);
+        fun = (1/(stdd^2)).*exp(-3.*(base./bbest).^F);
+        f1 = [fliplr(fun),(1/(stdd^2)),fun];
+        f2 = ftrans2(f1);        
         dnew = filter2(f2,d);
+        dnew = inscore(dnew, scores);
         newstd = std(dnew(:));
-        stdratio = newstd/sigma;
+        stdratio = newstd/stdd;
         dnew = dnew/stdratio;
         mdnew = mean(dnew(:));
-        dnew = dnew - mdnew ;
-
+        dnew = dnew - (mdnew-mu) ;
+        noisenew(:,:,i,en)=dnew;
+        
         % Combine noise and radar data
         logens = dnew + 10*(log(raddata(:,:,i)));
         ens(:,:,i,en) = exp(logens/10);
@@ -340,7 +356,8 @@ end
 
 toc
 
-save([results_path,'generatedensembles'],'raddata','ens')
+save([results_path,'generatedensembles2'],'raddata','ens')
+save([results_path,'noisenew'],'noisenew')
 
 toc
 
