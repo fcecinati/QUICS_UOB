@@ -17,15 +17,15 @@ coordinates_file = 'gaugecoordinates.dat';
 % Path to the folder where this and the other scripts/functions are:
 scripts_and_functions_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\QUICS_UOB\';
 % Results path
-results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\Test_5\';
+results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\Test_7\';
 % 
-% % Which of the stations have unusable data?
+% Which of the stations have unusable data?
 % known_corrupted_data_stations = [8;30;31;73;78;81;98;100;107;111;141;145;152;212;213;228;229; ...  % invalid data  
 %                                 168;174;178;194;% no data available for these gauges in 2007
 %                                 20;40;128;208;211];%other
 
 % Good gauges:
-good = [];
+good = [1;2;3;4;5;6;7;9;10;11;12;13;14;15;16;17;18;19;20;21;22;23;24;25;26;27;28;29;183;206;92;126;116;181;207;144;164;103;209;137;94;186;200;62];
 
 % Which year do you want to use for the covariance matrix calculation?
 year_to_consider = 2007;
@@ -70,8 +70,12 @@ years = years(years==year_to_consider);
 clear G_file R_file 
 
 % Use of NaN for negative values and to ignore days of no rain
-G(G<0) = NaN;
-R(R<0) = NaN;
+G = G(:,good);
+R = R(:,good);
+coord = coord(:,good);
+
+G(G<0.5) = NaN;
+R(R<0.5) = NaN;
 G(G==0) = NaN;
 R(R==0) = NaN;
 
@@ -80,8 +84,6 @@ R(R==0) = NaN;
 % G(:,corrupted) = [];
 % R(:,corrupted) = [];
 % coord(:,corrupted) = [];
-
-
 
 % Final size of the data matrix
 sz = size(R);
@@ -94,9 +96,14 @@ x=sz(2);
 % introduced!!!
 
 % Error matrix
-err = 10*(log(G./R));
+er_nongaussian = 10*(log(G./R));
 
-R(isnan(err)==1) = NaN;
+% application of normal score transform to obtain a gaussian error matrix
+R(isnan(er_nongaussian)==1) = NaN;
+er_nongaussian_vector = er_nongaussian(isnan(er_nongaussian)==0);
+[er_gaussian, scores] = nscore(er_nongaussian_vector);
+err = er_nongaussian;
+err(isnan(err)==0)=er_gaussian;
 
 % Mean without weights
 mean_e = nansum(R.*err)./nansum(R);
@@ -119,7 +126,7 @@ for k = 1:x
     end
 end
 
-clear temp1
+clear temp1 temp2
 %% spatial decorrelation function and plotting
 
 %calculation of correlation coefficients and distances
@@ -164,14 +171,13 @@ end
 % Autoregressive parameters r1 and r2
 r1=zeros(x,1);
 temp1 = zeros(t-1,1);
-temp2 = zeros(t-1,1);
-
+temp2 = zeros(t-2,1);
 for k = 1:x
     for tm = 1:t-1
         temp1(tm) = R(tm,k)*R(tm+1,k)*diff(tm,k)*diff(tm+1,k);
         temp2(tm) = R(tm,k)*R(tm+1,k);
     end
-    r1(k) = nansum(temp1)/nansum(temp2)*cov_e(k,k);
+    r1(k) = nansum(temp1)/(nansum(temp2)*cov_e(k,k));
 end
 r1m = nanmean(r1);
 r1max = max(r1);
@@ -185,7 +191,7 @@ for k = 1:x
         temp1(tm) = R(tm,k)*R(tm+2,k)*diff(tm,k)*diff(tm+2,k);
         temp2(tm) = R(tm,k)*R(tm+2,k);
     end
-    r2(k) = nansum(temp1)/nansum(temp2)*cov_e(k,k);
+    r2(k) = nansum(temp1)/(nansum(temp2)*cov_e(k,k));
 end
 r2m = nanmean(r2);
 r2max = max(r2);
@@ -216,7 +222,7 @@ end
 
 [U,D,V] = svd(cov_e);
 L = U*(D^0.5);
-clear U D V
+% clear U D V
 
 % Test to check that L*L_transp equals the covariance matrix
 if cov_dec == 'Y'
@@ -246,20 +252,21 @@ v=((1+a2)/((1-a2)*(1-a1+a2)*(1+a1+a2)))^(-0.5);
 
 %% Generation of the perturbed field
 n = number_ens;
-delta1 = zeros(x,t,n);
-delta = zeros(x,t,n);
+delta1 = zeros(x,t+2,n);
+delta2 = zeros(x,t+2,n);
 
 for ens = 1:n
     delta1(:,1,ens)= L*normrnd(0,1,x,1);
     delta1(:,2,ens)= L*normrnd(0,1,x,1);
-    for tm = 3:t
-        delta1(:,tm,ens) = L*normrnd(0,1,x,1) + a1*delta1(:,tm-1,ens) + a2*delta1(:,tm-2,ens);
-        delta(:,tm,ens) = delta1(:,tm,ens).*v + mean_e';
+    for tm = 3:t+2
+        delta1(:,tm,ens) = L*normrnd(0,1,x,1) + a1*delta1(:,(tm-1),ens) + a2*delta1(:,(tm-2),ens);
+        delta2(:,tm,ens) = delta1(:,tm,ens).*v + mean_e';
     end 
 end
 
-delta = delta(:,3:t,:);
-clear delta1
+delta2 = delta2(:,3:t+2,:);
+delta = inscore(delta2, scores);
+clear delta1 delta2
 
 %% Spatial Decorrelation Test on Generated Delta
 if spa_dec == 'Y'
@@ -267,24 +274,26 @@ if spa_dec == 'Y'
         d1 = delta(:,:,ens)';
 
         % Mean calculation
-        mean_d = nanmean(d1);
+        mean_d = nansum(R.*d1)./nansum(R);
 
         % Covariance Calculation
-        diffd = zeros(t-2,x);
-        for i=1:t-2 
+        diffd = zeros(t,x);
+        for i=1:t 
             diffd(i,:) = d1(i,:)- mean_d;
         end
         cov_d = zeros(x,x);
-        temp1 = zeros(t-2,1);
+        temp1 = zeros(t,1);
+        temp2 = zeros(t,1);
         for k = 1:x
             for l = 1:x
-                for tm = 1:t-2
-                    temp1(tm) = diffd(tm,k)*diffd(tm,l);
+                for tm = 1:t
+                    temp1(tm) = R(tm,k)*R(tm,l)*diffd(tm,k)*diffd(tm,l);
+                    temp2(tm) = R(tm,k)*R(tm,l);
                 end
-                cov_d(k,l) = nansum(temp1)/(t-2);
+                cov_d(k,l) = nansum(temp1)/nansum(temp2);
             end
         end
-
+        
         % Spatial correlation calculation
         correl_d = zeros(x,x);
         for x1=1:x
@@ -322,11 +331,11 @@ if temp_dec == 'Y'
         temp1 = zeros(t-1,1);
         temp2 = zeros(t-1,1);
         for k = 1:x
-            for tm = 1:t-3
+            for tm = 1:t-1
                 temp1(tm) = R(tm,k)*R(tm+1,k)*diffd(tm,k)*diffd(tm+1,k);
                 temp2(tm) = R(tm,k)*R(tm+1,k);
             end
-            r1d(k) = nansum(temp1)/nansum(temp2)*cov_e(k,k);
+            r1d(k) = nansum(temp1)/(nansum(temp2)*cov_d(k,k));
         end
         r1dm = nanmean(r1d);
         r1dmax = max(r1d);
@@ -336,11 +345,11 @@ if temp_dec == 'Y'
         temp1 = zeros(t-2,1);
         temp2 = zeros(t-2,1);
         for k = 1:x
-            for tm = 1:t-4
+            for tm = 1:t-2
                 temp1(tm) = R(tm,k)*R(tm+2,k)*diffd(tm,k)*diffd(tm+2,k);
                 temp2(tm) = R(tm,k)*R(tm+2,k);
             end
-            r2d(k) = nansum(temp1)/nansum(temp2)*cov_e(k,k);
+            r2d(k) = nansum(temp1)/(nansum(temp2)*cov_d(k,k));
         end
         r2dm = nanmean(r2d);
         r2dmax = max(r2d);

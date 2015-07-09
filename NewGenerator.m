@@ -111,7 +111,13 @@ if spa_corr_calc == 'Y'
     toc
     disp('data loading and preparing')
     %% Calculation of error statistics
-
+    
+%     ratio = R./G;
+%     bias = nanmean(ratio(:));
+%     R=R./bias;
+%     bb=G./R;
+%     nanmean(bb(:))
+    
     % Errors
     er = 10*(log(G./R));
     

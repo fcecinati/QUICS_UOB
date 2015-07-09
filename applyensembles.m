@@ -1,16 +1,7 @@
-clear all, close all;
+function [ens, raddata] = applyensembles(starting, time_steps, n_ensembles, radar_folder, tmpfolder, results_folder)
 
-%% INFORMATION TO PROVIDE: 
-
-starting = '2008-09-05 15:00:00';
-time_steps = 20;                    % in hours
-test = 10;
-radar_folder = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\data_north_england\09-2008\';
-ensembles_folder = ['\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\Test_',num2str(test),'\'];
-tmpfolder = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Temp\';
-mkdir('\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\Test_10\','Ensembles');
-results_folder = ['\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\Test_',num2str(test),'\Ensembles\'];
-n_ensembles = 5;
+mkdir(results_folder,'Ensembles');
+ensembles_folder = [results_folder,'\Ensembles\'];
 
 %% Load Radar
 st = datenum(starting);
@@ -29,7 +20,7 @@ for i = 1:time_steps
     [mtx(:,:,i), r_date, r_param] = readnimrod(filename);   % function to read nimrod Met Office rainfall data
         
     for en = 1:n_ensembles
-        ensname =  [ensembles_folder, 'Ensemble_n',num2str(en),'_step' num2str(i),'.dat'];
+        ensname =  [results_folder, 'Ensemble_n',num2str(en),'_step' num2str(i),'.dat'];
         [noise, e_date, e_param] = readnimrod(ensname); 
 
         x_start = (e_param(3) - r_param(3))/ 1000;
@@ -48,17 +39,17 @@ for i = 1:time_steps
         figure(fig1)
         imagesc(raddata(:,:,i))
         colorbar
-        name = [results_folder,'Radar_data_step',num2str(i),'.jpg'];
+        name = [ensembles_folder,'Radar_data_step',num2str(i),'.jpg'];
         saveas(fig1, name)
         close(fig1)
 
         figure(fig2)
         imagesc(ens(:,:,i))
         colorbar
-        name = [results_folder,'Ensemble',num2str(en),'_step',num2str(i),'.jpg'];
+        name = [ensembles_folder,'Ensemble',num2str(en),'_step',num2str(i),'.jpg'];
         saveas(fig2, name)  
         close(fig2)
     end
 end
 
-save ([results_folder,'Test_',num2str(test)], 'ens', 'raddata')
+save ([ensembles_folder,'Test_',num2str(test)], 'ens', 'raddata')

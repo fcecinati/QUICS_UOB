@@ -1,13 +1,34 @@
-%This script will implement the Germann's method for ensemble generation
+% This script generates radar rainfall ensembles with a method very similar 
+% to the REAL method, described by (Germann et al. 2009*).
+% The main differences are:
+% 1) the weighting system adopted by Germann et al. is not used.
+% 2) a normal score transform is applied to the errors
+% 3) the decomposition of the covariance matrix is done with a singular 
+%   value decomposition instead of a Cholewsky algorithm, eliminating the 
+%   requirement for a positive definite covariance matrix.
 
+%  Read the attached README file for information on the required data and
+%  files
+
+% Code by Francesca Cecinati, University of Bristol, Civil Eng.Dept. 
+% francesca.cecinati@bristol.ac.uk
+
+% * Germann, U., Berenguer, M., Sempere-torres, D., & Zappa, M. (2009). 
+% REAL – Ensemble radar precipitation estimation for hydrology in 
+% mountainous region. Q. J. R. Meteorol. Soc, 135(February), 445–456.
+
+%% 
 clear all
 close all
 clc
 rng('shuffle')
-%% Parameters to define:
+
+%% INFORMATION TO PROVIDE:
+
+% Folders:
 
 % Path to the folder where the rain gauges, the corresponding radar and the coordinate .dat files are:
-data_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\data_north_england';
+data_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\data_north_england\';
 % Name of the rain gauges .dat file with extension:
 rain_gauge_file = 'gauge_1h_2007-2011.dat';
 % Name of the corresponding .dat radar file:
@@ -18,23 +39,27 @@ coordinates_file = 'gaugecoordinates.dat';
 scripts_and_functions_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\QUICS_UOB\';
 % Results path
 results_path = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Results\Test_German\Test_9\';
+% Path to the complete radar data
+radar_folder = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\data_north_england\09-2008\';
+% Temporary folder
+tmpfolder = '\\ads.bris.ac.uk\filestore\MyFiles\Staff3\fc14509\Documents\QUICS\MATLAB_rep\Temp\'; 
+
+% Parameters:
 
 % Which of the stations have unusable data?
-known_corrupted_data_stations = [8;30;31;73;78;81;98;100;107;111;141;145;152;212;213;228;229; ...  % invalid data  
-                                168;174;178;194;% no data available for these gauges in 2007
-                                20;40;128;208;211];%other
-
-        % % Good gauges:
-        % good = [1;2;3;4;5;6;7;9;10;11;12;13;14;15;16;17;18;19;20;21;22;23;24;25;26;27;28;29;183;206;92;126;116;181;207;144;164;103;209;137;94;186;200;62];
-
+known_corrupted_data_stations = [8;30;31;73;78;81;98;100;107;111;141;145;152;212;213;228;229;168;174;178;194;20;40;128;208;211];
 % Which year do you want to use for the covariance matrix calculation?
 year_to_consider = 2007;
 % How many ensembles do you want to generate
-number_ens = 5;
+n_ensembles = 5;
+% What is the starting date of the ensembles you need?
+starting = '2008-09-05 15:00:00';
 % How many hours is your simulation long?
-sim_hours = 20;
+time_steps = 20;
 
-% Do you want to check the covariance decomposition? (Y/N)
+% Optional output (Y/N):
+
+% Do you want to check the covariance decomposition? 
 cov_dec = 'Y';
 % Do you want to plot the spatial correlation of the errors?
 plot_spa = 'Y';
@@ -44,6 +69,7 @@ plot_tem = 'Y';
 spa_dec = 'Y';
 % Do you want to check the temporal correlation of the perturbed fields?
 temp_dec = 'Y';
+
 
 %% Read data
 
@@ -93,13 +119,10 @@ x=sz(2);
     
 %% Calculation of error statistics
 
-% !!! A test to check if the errors can be assumed as gaussian must be
-% introduced!!!
-
 % Error matrix
 er_nongaussian = 10*(log(G./R));
 
-% application of normal score transform to obtain a gaussian error matrix
+% Application of normal score transform to obtain a gaussian error matrix
 R(isnan(er_nongaussian)==1) = NaN;
 er_nongaussian_vector = er_nongaussian(isnan(er_nongaussian)==0);
 [er_gaussian, scores] = nscore(er_nongaussian_vector);
@@ -127,7 +150,7 @@ for k = 1:x
 end
 
 clear diff temp1
-%% spatial decorrelation function and plotting
+%% Spatial decorrelation function and plotting
 
 %calculation of correlation coefficients and distances
 correl = zeros(x,x);
@@ -140,7 +163,7 @@ for x1=1:x
     end
 end
 
-%reshaping and NaN elimination for function estimation and plotting
+% Reshaping and NaN elimination for function estimation and plotting
 c = reshape(correl,x*x,1);
 d = reshape(distance,x*x,1);
 d(isnan(c)) = [];
@@ -152,7 +175,7 @@ myfunction = fittype('exp(-((d/R0)^F))','independent',{'d'},'coefficients',{'R0'
 myoption = fitoptions('Method','NonlinearLeastSquares','StartPoint',[0.5 0.9]);
 myfit = fit(d,c,myfunction,myoption);
 
-%Plotting
+% Plotting
 if plot_spa == 'Y'
     fig = figure;
     figure(fig)
@@ -165,9 +188,9 @@ if plot_spa == 'Y'
     close(fig)
 end
 
-%% temporal decorrelation function and plotting
+%% Temporal decorrelation function and plotting
 
-% correlation calculation at 1, 2, 3 hours lag
+% Correlation calculation at 1, 2, 3 hours lag
 rho_t = zeros(x,4);
 rho_t(:,1) = 1;
 for lag=1:3
@@ -188,7 +211,7 @@ rho = nanmean(rho_t);
 x_axis = (0:3);
 clear rho_t
 
-%Plotting
+% Plotting
 if plot_tem == 'Y'
     fig = figure;
     figure(fig)
@@ -241,7 +264,7 @@ a2 = (r2m-(r1m^2))/(1-(r1m^2));
 v=((1+a2)/((1-a2)*(1-a1+a2)*(1+a1+a2)))^(-0.5);
 
 %% Generation of the perturbed field
-n = number_ens;
+n = n_ensembles;
 delta1 = zeros(x,t+2,n);
 delta2 = zeros(x,t+2,n);
 
@@ -349,8 +372,13 @@ if temp_dec == 'Y'
     end
 end
 
-%% saving the results
-save ([results_path,'delta.mat'],'delta','coord')
+%% Generate the noise
+noise = Noise(delta, coord, time_steps, results_path);
 
-%% Generate the ensembles
-ensembles = Ensembles(delta, coord, sim_hours, results_path);
+%% Apply the noise to original radar data, to generate the ensembles
+[ensembles, raddata] = applyensembles(starting, time_steps, n_ensembles, radar_folder, tmpfolder, results_path);
+
+%% Save the results
+save ([results_path,'delta.mat'],'delta','coord','noise','ensembles','raddata')
+
+
