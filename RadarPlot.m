@@ -1,46 +1,51 @@
-function []=RadarPlot(raddata,ens, res_folder,ts)
-close all
+function []=RadarPlot(raddata,ens, name)
 
-Eprint = raddata(:,:,ts);
-name = 'Rad';
-fig=figure;
-figure(fig)
-set(gca,'Position',[0 0 1 1])
-set(fig, 'Position', [100 100 1000 900])
-subplot(3,3,1)
+    close all
 
-
-cmap = colormap('jet');
-n = size(cmap, 1);
-zerovalue = [1 1 1];
-minimum = -1.5;
-maximum = 2.2;
-imagesc(log(Eprint), [0 maximum])
-dmap = (maximum-minimum)/n;
-colormap([zerovalue;cmap]);
-caxis([minimum-dmap maximum]);
-% colorbar
-title(['Radar - mean=',num2str(mean(Eprint(:))),' - std=',num2str(std(Eprint(:)))])
+    Eprint = raddata(:,:);
+    fig=figure;
+    figure(fig)
+    set(gca,'Position',[0 0 1 1])
+    set(fig, 'Position', [100 100 500 450])
+    colorbar
+    subplot(3,3,1)
 
 
-for i=2:9
-
-    Eprint = ens(:,:,ts,i+10);
-    name = ['Ens',num2str(i),'- mean=',num2str(mean(Eprint(:))),' - std=',num2str(std(Eprint(:)))];
-    subplot(3,3,i)
     cmap = colormap('jet');
     n = size(cmap, 1);
     zerovalue = [1 1 1];
     minimum = -1.5;
     maximum = 2.2;
-    dmap = (maximum-minimum)/n;
     imagesc(log(Eprint), [0 maximum])
+    dmap = (maximum-minimum)/n;
     colormap([zerovalue;cmap]);
     caxis([minimum-dmap maximum]);
-%     colorbar
-    title(name)
-    
-end
+    % colorbar
+    title(['Radar - mean=',num2str(mean(Eprint(:))),' - std=',num2str(std(Eprint(:)))])
 
-    saveas(fig,[res_folder, 'ensembles', '.fig'])
-    print(fig,[res_folder, 'ensembles'],'-dpng','-r300')
+
+    for i=2:9
+
+        Eprint = ens(:,:,i);
+        nm = ['Ens',num2str(i-1),'- mean=',num2str(mean(Eprint(:))),' - std=',num2str(std(Eprint(:)))];
+        subplot(3,3,i)
+        cmap = colormap('jet');
+        n = size(cmap, 1);
+        zerovalue = [1 1 1];
+        minimum = -1.5;
+        maximum = 2.2;
+        dmap = (maximum-minimum)/n;
+        imagesc(log(Eprint), [0 maximum])
+        colormap([zerovalue;cmap]);
+        caxis([minimum-dmap maximum]);
+    %     colorbar
+        title(nm)
+
+    end
+    hp4 = get(subplot(3,3,9),'Position');
+    colorbar('Position',[hp4(1)+hp4(3)+0.02  hp4(2)  0.01  hp4(2)+hp4(3)*3.2]);
+
+       
+
+    saveas(fig,[name, '.fig'])
+    print(fig,name,'-dpng','-r300')
